@@ -53,6 +53,12 @@ def info():
 
 @management_endpoints_blueprint.route("/health/<check_name>")
 def nested_health_check(check_name):
+    # Do not allow check names greater than 128 characters. There is so much
+    # that could go wrong from a security perspective by leaving this
+    # unbounded, so we are just going to use a reasonable hardcoded maximum.
+    if len(check_name) > 128:
+        return current_app.render_template("404.html")
+
     all_successful = True
 
     if check_name in CASCADING_CHECKS:
