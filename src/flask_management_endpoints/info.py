@@ -11,10 +11,11 @@ pod_name_re = re.compile(r'(\w+)-([a-z0-9]{9})-([a-z0-9]{5})')
 
 
 class Info(dict):
-    def __init__(self, app_name: str):
+    def __init__(self, app_name: str, enable_service_instance_id: Optional[bool] = False):
         super().__init__()
         self['app'] = Info.app_attributes(name=app_name)
-        self['trace.attributes'] = Info.trace_attributes(app_name)
+        self['trace.attributes'] = Info.trace_attributes(app_name=app_name,
+                                                         enable_service_instance_id=enable_service_instance_id)
 
     @staticmethod
     def app_attributes(name: Optional[str] = None,
@@ -29,7 +30,9 @@ class Info(dict):
 
     @staticmethod
     def trace_attributes(app_name: str,
-                         version: Optional[str] = os.getenv('VERSION')) -> dict:
+                         version: Optional[str] = os.getenv('VERSION'),
+                         enable_service_instance_id: Optional[bool] = False) -> dict:
+
         attributes = {'service.name': app_name}
         if version:
             attributes['service.version'] = version
@@ -42,9 +45,10 @@ class Info(dict):
         container_id_attributes = Info.container_id()
         if container_id_attributes:
             attributes.update(container_id_attributes)
-        service_instance_id = Info.service_instance_id(app_name=app_name)
-        if service_instance_id:
-            attributes.update(service_instance_id)
+        if enable_service_instance_id:
+            service_instance_id = Info.service_instance_id(app_name=app_name)
+            if service_instance_id:
+                attributes.update(service_instance_id)
         k8s_attributes = Info.k8s()
         if k8s_attributes:
             attributes.update(k8s_attributes)

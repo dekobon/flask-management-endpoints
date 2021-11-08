@@ -44,7 +44,9 @@ def info():
     application is running.
 
     """
-    info_attributes = Info(app_name=current_app.name)
+    config = _z_endpoints_config()
+    info_attributes = Info(app_name=current_app.name,
+                           enable_service_instance_id=config['enable_service_instance_id'])
 
     return Response(response=json.dumps(info_attributes),
                     content_type='application/json',
@@ -145,6 +147,9 @@ def _z_endpoints_config() -> dict:
         config['check_functions'] = {}
     if 'version_function' not in config:
         config['version_function'] = _default_version_function
+
+    if 'enable_service_instance_id' not in config:
+        config['enable_service_instance_id'] = False
 
     return config
 
