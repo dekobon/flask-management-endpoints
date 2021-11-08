@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import Optional, Callable, List
 
@@ -9,36 +10,43 @@ from urllib3.util import parse_url, Url
 
 from .info import Info
 
+DEFAULT_URL_PREFIX = '/z'
+
 # Endpoints in this list are allowed to make cascading calls to
 # dependent services.
-CASCADING_CHECKS: List[str] = ['readiness']
+cascading_checks: List[str] = ['readiness']
 # Endpoints in this list are allowed to make calls to closures
 # for their input.
-CHECKS_WITH_PLUGGABLE_FUNCTIONS: List[str] = ['readiness', 'version_function']
+checks_with_pluggable_functions: List[str] = ['readiness', 'version_function']
 # This is the Flask blueprint object that is used to import the
 # blueprint into a Flask application.
-management_endpoints_blueprint = Blueprint(name='management_endpoints',
-                                           import_name=__name__,
-                                           url_prefix='/z')
+z_blueprint = Blueprint(name='management_endpoints',
+                        import_name=__name__,
+                        url_prefix=DEFAULT_URL_PREFIX)
+
+if current_app and current_app.logger:
+    logger: logging.Logger = current_app.logger
+else:
+    logger: logging.Logger = logging.getLogger('management_endpoints_blueprint')
 
 
 class HealthError(Exception):
     pass
 
 
-@management_endpoints_blueprint.route('/version', methods=['GET'])
+@z_blueprint.route('/version', methods=['GET'])
 def version():
     """
     Returns the version of the Flask application.
     """
-    if 'version_function' in CHECKS_WITH_PLUGGABLE_FUNCTIONS:
+    if 'version_function' in checks_with_pluggable_functions:
         version_function = _z_endpoints_config()['version_function']
         return version_function()
     else:
-        return current_app.render_template("404.html")
+        abort(404)
 
 
-@management_endpoints_blueprint.route('/info', methods=['GET'])
+@z_blueprint.route('/info', methods=['GET'])
 def info():
     """
     Returns information about the environment in which this Flask
@@ -54,28 +62,28 @@ def info():
                     status=200)
 
 
-@management_endpoints_blueprint.route("/health/<check_name>")
+@z_blueprint.route("/health/<check_name>")
 def nested_health_check(check_name):
     # Do not allow check names greater than 128 characters. There is so much
     # that could go wrong from a security perspective by leaving this
     # unbounded, so we are just going to use a reasonable hardcoded maximum.
     if len(check_name) > 128:
-        return current_app.render_template("404.html")
+        abort(404)
 
     all_successful = True
 
-    if check_name in CASCADING_CHECKS:
+    if check_name in cascading_checks:
         if not _terse_cascading_z_check(check_name):
             all_successful = False
     elif check_name == 'liveness' or check_name == 'ping':
         all_successful = True
     else:
-        return current_app.render_template("404.html")
+        abort(404)
 
     config = _z_endpoints_config()
     check_config = config['check_functions']
 
-    if check_name in CHECKS_WITH_PLUGGABLE_FUNCTIONS and check_name in check_config:
+    if check_name in checks_with_pluggable_functions and check_name in check_config:
         for func_name, run_check_func in check_config[check_name].items():
             if not run_check_func():
                 all_successful = False
@@ -85,7 +93,7 @@ def nested_health_check(check_name):
     return Response(json.dumps(status), content_type='application/json', status=status_code)
 
 
-@management_endpoints_blueprint.route("/health")
+@z_blueprint.route("/health")
 def health():
     config = _z_endpoints_config()
 
@@ -113,7 +121,7 @@ def health():
 
     # Run each applicable health check function
     check_config = config['check_functions']
-    for check_name in CHECKS_WITH_PLUGGABLE_FUNCTIONS:
+    for check_name in checks_with_pluggable_functions:
         if check_name in check_config:
             for func_name, run_check_func in check_config[check_name].items():
                 success = run_check_func()
@@ -166,6 +174,10 @@ def _check_backend(backend_name: str, backend_host: str, check_name: Optional[st
         response_json = response.json()
         status_is_up = 'status' in response_json and response_json['status'] == 'UP'
 
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f'remote service check [url={url}, status_code={response.status_code}, '
+                         f'status={status_is_up}]')
+
         # If a response hook has been defined and we haven't error trying to decode JSON
         if response_hook and response_json:
             response_hook(check_name, backend_name, url, response)
@@ -175,11 +187,11 @@ def _check_backend(backend_name: str, backend_host: str, check_name: Optional[st
                   f'status_code={response.status_code}:\n{response_json}'
             raise HealthError(msg)
     except HealthError as err:
-        current_app.logger.error(err)
+        logger.error(err)
         return False
     except (IOError, ValueError) as err:
         msg = f'Check against {url} failed [check={check_name}]: {err}'
-        current_app.logger.error(msg)
+        logger.error(msg)
         return False
 
     return True
