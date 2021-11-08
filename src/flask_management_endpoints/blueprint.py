@@ -4,7 +4,8 @@ from typing import Optional, Callable, List
 
 import flask
 import requests
-from flask import Blueprint, current_app, Response
+from flask import Blueprint, current_app, Response, abort
+from urllib3.util import parse_url, Url
 
 from .info import Info
 
@@ -157,14 +158,10 @@ def _z_endpoints_config() -> dict:
 def _check_backend(backend_name: str, backend_host: str, check_name: Optional[str] = None,
                    response_hook: Optional[Callable] = None) -> bool:
     timeout = current_app.config['BACKEND_TIMEOUT']
-    if check_name:
-        check_endpoint = f'/{check_name}'
-    else:
-        check_endpoint = ''
-    url = f'http://{backend_host}/z/health{check_endpoint}'
     response = None
 
     try:
+        url = _backend_host_as_url(backend_name=backend_name, backend_host=backend_host, check_name=check_name)
         response = requests.get(url=url, timeout=timeout)
         response_json = response.json()
         status_is_up = 'status' in response_json and response_json['status'] == 'UP'
@@ -186,6 +183,36 @@ def _check_backend(backend_name: str, backend_host: str, check_name: Optional[st
         return False
 
     return True
+
+
+def _backend_host_as_url(backend_name: str, backend_host: str, check_name: str) -> str:
+    if backend_host == '':
+        raise HealthError(f'empty backend host specified [backend_name={backend_name}]')
+
+    if check_name:
+        check_endpoint = f'/{check_name}'
+    else:
+        check_endpoint = ''
+
+    scheme = os.getenv('PREFERRED_URL_SCHEME', os.getenv('SCHEME', 'http'))
+    url_prefix = z_blueprint.url_prefix or '/z'
+
+    # If the backend doesn't have a scheme we use the one hinted by the environment or alternatively
+    # we use http. If the backend doesn't have a path, then we use the URL prefix of the current management
+    # endpoints blueprints.
+    if not backend_host.startswith('http') and '/' not in backend_host:
+        url = f'{scheme}://{backend_host}{url_prefix}/health{check_endpoint}'
+    elif not backend_host.startswith('http'):
+        url = f'{scheme}://{backend_host}{check_endpoint}'
+    else:
+        url = f'{backend_host}{check_endpoint}'
+
+    try:
+        parsed_url: Url = parse_url(url)
+        return str(parsed_url)
+    except Exception as err:
+        raise HealthError(f'unable to parse backend as URL or host as URL [backend_name={backend_name},'
+                          f'backend_host={backend_host},candidate_url={url}]') from err
 
 
 def _terse_cascading_z_check(check_name) -> bool:
