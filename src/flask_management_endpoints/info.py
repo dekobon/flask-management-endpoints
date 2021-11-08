@@ -213,7 +213,7 @@ class Info(dict):
                         return None
                     else:
                         return content
-            except:
+            except Exception:
                 pass
 
         return None

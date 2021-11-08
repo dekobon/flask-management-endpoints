@@ -101,10 +101,10 @@ def health():
     status = {'components': {}}
     components = status['components']
 
-    def response_hook(_backend_host: str, backend_name: str, _url: str,
+    def response_hook(_backend_host: str, _backend_name: str, _url: str,
                       response: Optional[flask.Response] = None):
         if response is not None:
-            components[backend_name].update(response.json())
+            components[_backend_name].update(response.json())
 
     # Check every dependent webservice and get its health status
     for backend_name, backend_host in config['service_dependencies'].items():
@@ -166,7 +166,7 @@ def _z_endpoints_config() -> dict:
 def _check_backend(backend_name: str, backend_host: str, check_name: Optional[str] = None,
                    response_hook: Optional[Callable] = None) -> bool:
     timeout = current_app.config['BACKEND_TIMEOUT']
-    response = None
+    url = None
 
     try:
         url = _backend_host_as_url(backend_name=backend_name, backend_host=backend_host, check_name=check_name)
