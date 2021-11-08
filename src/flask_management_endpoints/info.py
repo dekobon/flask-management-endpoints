@@ -7,10 +7,17 @@ import tempfile
 import uuid
 from typing import Optional
 
+# Regex that validates and parses a k8s pod name from a network hostname
 pod_name_re = re.compile(r'(\w+)-([a-z0-9]{9})-([a-z0-9]{5})')
 
 
 class Info(dict):
+    """
+    Class providing information about the running application and host system. The data
+    returned from this class is roughly in the same form as returned by Spring Actuator's
+    /info endpoint with supplemental trace attributes that are in the Open Telemetry
+    Resource format.
+    """
     def __init__(self, app_name: str, enable_service_instance_id: Optional[bool] = False):
         super().__init__()
         self['app'] = Info.app_attributes(name=app_name)
@@ -20,6 +27,12 @@ class Info(dict):
     @staticmethod
     def app_attributes(name: Optional[str] = None,
                        version: Optional[str] = os.getenv('VERSION')):
+        """
+        Method providing information about the running application.
+        :param name: name of application
+        :param version: version of application
+        :return: dictionary containing application information
+        """
         attributes = {}
         if name:
             attributes['name'] = name
@@ -32,7 +45,13 @@ class Info(dict):
     def trace_attributes(app_name: str,
                          version: Optional[str] = os.getenv('VERSION'),
                          enable_service_instance_id: Optional[bool] = False) -> dict:
-
+        """
+        Method providing trace information in the Open Telemetry Resource format.
+        :param app_name: name of application
+        :param version: version of application
+        :param enable_service_instance_id: when true a unique service instance is generated and stored on disk
+        :return: dictionary containing Open Telemetry resource attributes
+        """
         attributes = {'service.name': app_name}
         if version:
             attributes['service.version'] = version
@@ -57,6 +76,10 @@ class Info(dict):
 
     @staticmethod
     def host_info(hostname: Optional[str] = os.getenv('HOSTNAME') or socket.gethostname()) -> dict:
+        """
+        Method providing information about the underlying host.
+        :param hostname: network hostname
+        """
         attributes = {
             'host.arch': platform.machine().replace('x86_64', 'amd64'),
             'host.name': platform.node(),
@@ -69,6 +92,9 @@ class Info(dict):
 
     @staticmethod
     def os_info() -> dict:
+        """
+        Method providing information about the underlying OS.
+        """
         return {
             'os.description': f'{platform.system()} {platform.release()}',
             'os.type': platform.system().lower()
@@ -76,6 +102,9 @@ class Info(dict):
 
     @staticmethod
     def process_info() -> dict:
+        """
+        Method providing information about the application's running process.
+        """
         return {
             'process.pid': os.getpid(),
             'process.command_line': ' '.join(sys.argv),
@@ -87,6 +116,10 @@ class Info(dict):
 
     @staticmethod
     def machine_id(machine_id_file: Optional[str] = '/etc/machine-id') -> dict:
+        """
+        Method that returns a unique machine id as read from a file on the local filesystem.
+        :param machine_id_file: path to file containing machine id file
+        """
         attributes = {}
 
         file_content = Info.read_first_line(machine_id_file)
@@ -97,6 +130,10 @@ class Info(dict):
 
     @staticmethod
     def container_id(cpuset_file: Optional[str] = '/proc/1/cpuset') -> dict:
+        """
+        Method that returns the running container id if available.
+        :param cpuset_file: path to file containing cpuset details
+        """
         attributes = {}
 
         file_content = Info.read_first_line(cpuset_file)
@@ -112,6 +149,12 @@ class Info(dict):
     @staticmethod
     def service_instance_id(app_name: str,
                             service_instance_id_file: Optional[str] = None):
+        """
+        Method that generates a unique service id and stores it on a file in the file system. This
+        service id would remain constant for the life of an application on a given host.
+        :param app_name: name of application
+        :param service_instance_id_file: name of file to store service instance id in
+        """
         if not service_instance_id_file:
             tempdir = tempfile.gettempdir()
             filename = f'{app_name}-service-instance-id'
@@ -133,6 +176,12 @@ class Info(dict):
     @staticmethod
     def k8s(hostname: Optional[str] = os.getenv('HOSTNAME') or socket.gethostname(),
             namespace: Optional[str] = os.getenv('NAMESPACE')) -> Optional[dict]:
+        """
+        Method that returns details about the running Kubernetes environment.
+        :param hostname: network hostname from which the pod name will be parsed
+        :param namespace: kubernetes namespace
+        :return:
+        """
         if not hostname and not namespace:
             return None
 
@@ -150,6 +199,11 @@ class Info(dict):
 
     @staticmethod
     def read_first_line(file: str) -> Optional[str]:
+        """
+        Utility method that reads the first 1024 characters from a file into a string.
+        :param file: file to read
+        :return: string containing contents of file
+        """
         if os.path.isfile(file):
             # noinspection PyBroadException
             try:
