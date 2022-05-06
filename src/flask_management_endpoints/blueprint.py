@@ -14,10 +14,10 @@ DEFAULT_URL_PREFIX = '/z'
 
 # Endpoints in this list are allowed to make cascading calls to
 # dependent services.
-cascading_checks: List[str] = ['readiness']
+cascading_checks: List[str] = []
 # Endpoints in this list are allowed to make calls to closures
 # for their input.
-checks_with_pluggable_functions: List[str] = ['readiness', 'version_function']
+checks_with_pluggable_functions: List[str] = ['health', 'readiness', 'version_function']
 # This is the Flask blueprint object that is used to import the
 # blueprint into a Flask application.
 z_blueprint = Blueprint(name='management_endpoints',
@@ -77,7 +77,7 @@ def nested_health_check(check_name):
             all_successful = False
     elif check_name == 'liveness' or check_name == 'ping':
         all_successful = True
-    else:
+    elif check_name != 'readiness':
         abort(404)
 
     config = _z_endpoints_config()

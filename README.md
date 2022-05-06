@@ -11,7 +11,7 @@ is designed in the style of [Spring Actuator management endpoints](https://docs.
 | `/health`             | `GET / json`         | Runs all health checks and outputs the status of each health check.                                                             |
 | `/health/liveness`    | `GET / json`         | Returns successfully if endpoint is running with terse output.                                                                  |
 | `/health/ping`        | `GET / json`         | Returns successfully if endpoint is running with terse output (same as liveness).                                               |
-| `/health/readiness`   | `GET / json`         | Readiness probe endpoint that runs all health checks and has terse output.                                                      |
+| `/health/readiness`   | `GET / json`         | Readiness probe endpoint that can run dependent checks, but is the same as liveness by default.                                 |
 | `/version`            | `GET / plaintext`    | By default returns the contents of the environment variable `VERSION`, but can be configured to return any value via a closure. |
 
 ## Configuration
@@ -48,7 +48,8 @@ app.config.update(
 )
 ```
 
-If you would like to have custom functions that will execute on the readiness check, you can define them as follows:
+If you would like to have custom functions that will execute on the on a given check (health, readiness, version, etc), 
+you can define them as follows.
 ```python
 def db_check():
     try:
@@ -62,7 +63,7 @@ def db_check():
 app.config.update(
     Z_ENDPOINTS={
         'check_functions': {
-            'readiness': {
+            'health': {
                 'db': db_check
             }
         }
